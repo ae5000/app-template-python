@@ -1,0 +1,33 @@
+name: Validate
+
+on:
+  pull_request:
+    paths:
+      - "platform.yaml"
+      - ".github/workflows/validate.yml"
+
+jobs:
+  validate-platform-yaml:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml pydantic httpx
+
+      - name: Download validator
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/${{ vars.GITHUB_ORG }}/platform-infra/main/scripts/validate_platform.py \
+            -o validate_platform.py
+
+      - name: Validate platform.yaml
+        env:
+          PLATFORM_TOKEN: ${{ secrets.PLATFORM_TOKEN }}
+          PLATFORM_REGISTRY_URL: https://registry.${{ vars.PLATFORM_DOMAIN }}
+        run: python validate_platform.py platform.yaml

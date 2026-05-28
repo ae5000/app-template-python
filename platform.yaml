@@ -1,0 +1,16 @@
+service:
+  name: my-service
+  group: engineering
+  description: "Short description of what this service does"
+  owners:
+    - your-email@example.com
+
+runtime:
+  port: 8000
+  health_check: /health
+
+expose:
+  preset: all
+  access:
+    require_any_group:
+      - engineering

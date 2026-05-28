@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      IMAGE: ghcr.io/${{ vars.GITHUB_ORG }}/${{ github.event.repository.name }}
+      # SWARM_SERVICE_NAME defaults to repo name. Override as a repo variable
+      # when the Swarm service name differs (e.g. bgrx-gateway → mcp-gateway).
+      SWARM_SERVICE: ${{ vars.SWARM_SERVICE_NAME || github.event.repository.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:latest
+          cache-to: type=inline
+          build-args: GITHUB_ORG=${{ vars.GITHUB_ORG }}
+          secrets: sdk_token=${{ secrets.SDK_INSTALL_TOKEN }}
+
+      - name: Deploy to Swarm
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SWARM_SSH_HOST }}
+          username: ${{ secrets.SWARM_SSH_USER }}
+          key: ${{ secrets.SWARM_SSH_KEY }}
+          script: |
+            docker service update \
+              --image ghcr.io/${{ vars.GITHUB_ORG }}/${{ github.event.repository.name }}:${{ github.sha }} \
+              --update-order start-first \
+              --with-registry-auth \
+              platform_${{ env.SWARM_SERVICE }}
+
+      - name: Notify platform registry
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${{ secrets.PLATFORM_TOKEN }}" \
+            https://registry.${{ vars.PLATFORM_DOMAIN }}/registry/${{ github.event.repository.name }}/heartbeat \
+            || true
