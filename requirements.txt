@@ -1,3 +1,9 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
+jinja2>=3.1
+aiofiles>=23.0
+python-multipart>=0.0.9
+pytest>=8.0
+pytest-asyncio>=0.24
+httpx>=0.27
 # platform SDK installed from git — see Dockerfile
