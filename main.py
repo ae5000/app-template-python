@@ -101,8 +101,7 @@ async def channel_ws(websocket: WebSocket, channel_id: str):
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def ui_items(request: Request, user: PlatformUser = Depends(current_user)):
     items = [{"id": k, **v} for k, v in _items.items()]
-    return templates.TemplateResponse("pages/items.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "pages/items.html", {
         "user": _user_ctx(user),
         "items": items,
     })
@@ -114,8 +113,7 @@ async def ui_item_detail(
 ):
     if item_id not in _items:
         raise HTTPException(status_code=404, detail="Item not found")
-    return templates.TemplateResponse("pages/item_detail.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "pages/item_detail.html", {
         "user": _user_ctx(user),
         "item": {"id": item_id, **_items[item_id]},
     })
