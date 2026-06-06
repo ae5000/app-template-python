@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "macros/layout.html" import page_header %}
+{% from "macros/ui.html" import badge %}
+
+{% block page_title %}{{ item.name }}{% endblock %}
+{% block nav_title %}Items{% endblock %}
+{% block topbar_title %}Items{% endblock %}
+
+{% block topbar_breadcrumb %}
+  <span class="bc-sep">›</span>
+  <span class="bc-pg">{{ item.name }}</span>
+{% endblock %}
+
+{% block topbar_right %}
+  {{ badge(item.id, style="neu") }}
+{% endblock %}
+
+{% block body %}
+<div class="page-pad">
+
+  {{ page_header(item.name, "Item " ~ item.id) }}
+
+  {#
+    Custom Alpine component — escape hatch example.
+
+    This shows how to watch a specific store entry without using a macro.
+    The component reads from $store.app.items live (updated via WS push),
+    falling back to the SSR'd item data if not yet in the store.
+
+    This pattern works for any resource: find it in the store array by id,
+    fall back to SSR data while the store loads.
+  #}
+  <div x-data="{
+    get item() {
+      return $store.app.items.find(i => i.id === {{ item.id | tojson }})
+             || {{ item | tojson }};
+    }
+  }">
+
+    <div class="card card-pad section">
+      <div class="sec-label">Name</div>
+      <p style="font-size:14px;color:var(--t0);margin-bottom:16px" x-text="item.name"></p>
+
+      <div class="sec-label">Value</div>
+      <p style="font-size:14px;color:var(--t0)" x-text="item.value"></p>
+    </div>
+
+    <div style="margin-top:16px">
+      <a href="{{ request.root_path }}/" class="btn btn-ghost btn-sm">← Back to Items</a>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

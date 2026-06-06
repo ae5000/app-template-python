@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "macros/layout.html" import section_header, empty_state, page_header %}
+{% from "macros/forms.html" import create_form %}
+{% from "macros/ui.html" import live_table %}
+
+{% block page_title %}Items{% endblock %}
+{% block nav_title %}Items{% endblock %}
+{% block topbar_title %}Items{% endblock %}
+
+{% block left_nav %}
+  {{ section_header("All Items") }}
+  <template x-for="item in $store.app.items" :key="item.id">
+    <div class="nav-item"
+         :class="{'active': $store.app.ui.navItem === item.id}"
+         @click="$store.app.ui.navItem = item.id">
+      <div class="ni-body">
+        <div class="ni-name" x-text="item.name"></div>
+        <div class="ni-meta" x-text="item.value"></div>
+      </div>
+    </div>
+  </template>
+  <div x-show="$store.app.items.length === 0" x-cloak>
+    {{ empty_state("No items", "Create one below") }}
+  </div>
+{% endblock %}
+
+{% block topbar_right %}
+  <span class="badge badge-neu"
+        x-text="$store.app.items.length + ' item' + ($store.app.items.length === 1 ? '' : 's')">
+  </span>
+{% endblock %}
+
+{% block body %}
+<div class="page-pad">
+
+  {{ page_header("Items", "Live CRUD demo. New items appear instantly via WebSocket.") }}
+
+  {# Create form — uses platformForm Alpine component from app.js #}
+  {{ create_form(
+      action="/items",
+      fields=[
+          {"name": "name",  "label": "Name",  "placeholder": "Enter name"},
+          {"name": "value", "label": "Value", "placeholder": "Enter value"},
+      ],
+      submit_label="Create Item"
+  ) }}
+
+  {# Live table — driven by $store.app.items, updated via WS patches #}
+  {{ live_table(
+      store_path="items",
+      columns=[
+          {"field": "id",    "label": "ID"},
+          {"field": "name",  "label": "Name"},
+          {"field": "value", "label": "Value"},
+      ],
+      on_delete=True
+  ) }}
+
+</div>
+{% endblock %}
