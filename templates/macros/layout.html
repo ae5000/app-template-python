@@ -1,0 +1,52 @@
+{# ══════════════════════════════════════════════════
+   layout.html — structural / navigation macros
+══════════════════════════════════════════════════ #}
+
+{# nav_item — a clickable row in the left nav.
+   id:        used as the store's ui.navItem key
+   label:     display text
+   meta:      secondary text (optional)
+   dot_color: CSS color for the status dot (optional)
+   href:      if set, clicking navigates to this URL instead of updating store #}
+{% macro nav_item(id, label, meta="", dot_color=None, href=None) %}
+<div class="nav-item"
+     :class="{'active': $store.app.ui.navItem === '{{ id }}'}"
+     {% if href %}
+     @click="window.location.href = '{{ href }}'"
+     {% else %}
+     @click="$store.app.ui.navItem = '{{ id }}'"
+     {% endif %}>
+  {% if dot_color %}
+  <div class="ndot" style="background: {{ dot_color }};"></div>
+  {% endif %}
+  <div class="ni-body">
+    <div class="ni-name">{{ label }}</div>
+    {% if meta %}
+    <div class="ni-meta">{{ meta }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{# section_header — small uppercase label above a nav group or content section #}
+{% macro section_header(title) %}
+<div class="nav-sec">{{ title }}</div>
+{% endmacro %}
+
+{# empty_state — centered placeholder for empty lists #}
+{% macro empty_state(title, subtitle="") %}
+<div class="empty-state">
+  <div class="empty-state-title">{{ title }}</div>
+  {% if subtitle %}
+  <div class="empty-state-sub">{{ subtitle }}</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# page_header — h1 + optional subtitle at the top of a body block #}
+{% macro page_header(title, subtitle="") %}
+<h1 class="page-h">{{ title }}</h1>
+{% if subtitle %}
+<p class="page-sub">{{ subtitle }}</p>
+{% endif %}
+{% endmacro %}

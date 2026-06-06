@@ -1,0 +1,11 @@
+{# _all.html — barrel import. Add new macro files here.
+   Pages that do {% from "macros/_all.html" import * %} get all macros. #}
+{% from "macros/layout.html" import
+    nav_item, section_header, empty_state, page_header
+%}
+{% from "macros/ui.html" import
+    badge, status_dot, progress_bar, live_table, card_list
+%}
+{% from "macros/forms.html" import
+    text_input, select, submit_btn, create_form
+%}

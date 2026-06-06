@@ -1,0 +1,74 @@
+{# ══════════════════════════════════════════════════
+   forms.html — form input macros
+   All form macros use x-model to bind to the parent
+   platformForm component's "form" object.
+══════════════════════════════════════════════════ #}
+
+{# text_input — labeled text or password input.
+   name:        form field name (also the x-model key)
+   label:       display label
+   type:        HTML input type (default "text")
+   placeholder: placeholder text (optional) #}
+{% macro text_input(name, label, type="text", placeholder="") %}
+<div class="form-group">
+  <label class="form-label">{{ label }}</label>
+  <input class="form-input"
+         type="{{ type }}"
+         name="{{ name }}"
+         x-model="form.{{ name }}"
+         placeholder="{{ placeholder }}"/>
+</div>
+{% endmacro %}
+
+{# select — labeled dropdown.
+   name:    form field name
+   label:   display label
+   options: list of dicts with "value" and "label" keys #}
+{% macro select(name, label, options) %}
+<div class="form-group">
+  <label class="form-label">{{ label }}</label>
+  <select class="form-input" name="{{ name }}" x-model="form.{{ name }}">
+    <option value="">— Select —</option>
+    {% for opt in options %}
+    <option value="{{ opt.value }}">{{ opt.label }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endmacro %}
+
+{# submit_btn — form submit button. Disables and changes text while submitting. #}
+{% macro submit_btn(label="Save", style="btn-white") %}
+<button type="submit" class="btn {{ style }} btn-sm"
+        :disabled="submitting"
+        x-text="submitting ? 'Saving…' : '{{ label }}'">
+  {{ label }}
+</button>
+{% endmacro %}
+
+{# create_form — complete form component using the platformForm Alpine component
+   (registered in app.js). Submits JSON via fetch to apiBase + action.
+   Automatically includes X-Channel-Id header when a WS channel is open.
+
+   action: API path relative to apiBase, e.g. "/items"
+   fields: list of dicts with "name", "label", and optional "type", "placeholder"
+   submit_label: text for the submit button (default "Create") #}
+{% macro create_form(action, fields, submit_label="Create") %}
+{% set field_names = fields | map(attribute='name') | list %}
+<form x-data="platformForm({ action: {{ action | tojson }}, fields: {{ field_names | tojson }} })"
+      @submit.prevent="submit()"
+      style="margin-bottom:24px">
+  {% for f in fields %}
+  {{ text_input(
+      name=f.name,
+      label=f.label,
+      type=f.get('type', 'text'),
+      placeholder=f.get('placeholder', '')
+  ) }}
+  {% endfor %}
+  <div style="display:flex;align-items:center;gap:10px">
+    {{ submit_btn(label=submit_label) }}
+    <span x-show="error" x-text="error" x-cloak
+          style="font-size:11px;color:var(--red)"></span>
+  </div>
+</form>
+{% endmacro %}

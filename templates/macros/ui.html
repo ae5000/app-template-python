@@ -1,0 +1,106 @@
+{# ══════════════════════════════════════════════════
+   ui.html — data display macros
+══════════════════════════════════════════════════ #}
+
+{# badge — small inline status label.
+   style: "ok" | "warn" | "err" | "neu" (default "neu") #}
+{% macro badge(label, style="neu") %}
+<span class="badge badge-{{ style }}">{{ label }}</span>
+{% endmacro %}
+
+{# status_dot — animated dot tied to a status string in the store.
+   store_path: dot-notation path into $store.app (e.g. "ui.agentStatus")
+   Dot style maps: "connected"/"ok"/"ready" → ok, "busy"/"running" → busy,
+                   "error"/"err" → err, anything else → idle #}
+{% macro status_dot(store_path) %}
+<span class="sdot"
+      :class="{
+        ok:   ['connected','ok','ready'].includes($store.app.{{ store_path }}),
+        busy: ['busy','running'].includes($store.app.{{ store_path }}),
+        err:  ['error','err'].includes($store.app.{{ store_path }}),
+        idle: !['connected','ok','ready','busy','running','error','err'].includes($store.app.{{ store_path }})
+      }">
+</span>
+{% endmacro %}
+
+{# progress_bar — horizontal bar bound to a 0-100 value in the store.
+   store_path: dot-notation path to a number or null. Hidden when null. #}
+{% macro progress_bar(store_path) %}
+<div class="pbar" x-show="$store.app.{{ store_path }} !== null" x-cloak>
+  <div class="pbar-fill" :style="`width:${$store.app.{{ store_path }} ?? 0}%`"></div>
+</div>
+{% endmacro %}
+
+{# live_table — table driven by an array in the Alpine store.
+   store_path: dot-notation path to an array (e.g. "items")
+   columns:    list of dicts with "field" and "label" keys.
+               If omitted, renders id/name/value columns (matches the items demo).
+   on_delete:  if True, renders a delete button that calls DELETE /api/{store_path}/{item.id} #}
+{% macro live_table(store_path, columns=None, on_delete=False) %}
+{% set cols = columns or [
+  {"field": "id",    "label": "ID"},
+  {"field": "name",  "label": "Name"},
+  {"field": "value", "label": "Value"},
+] %}
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        {% for col in cols %}<th>{{ col.label }}</th>{% endfor %}
+        {% if on_delete %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="row in $store.app.{{ store_path }}" :key="row.id">
+        <tr>
+          {% for col in cols %}
+          <td x-text="row.{{ col.field }}"
+              {% if col.field == "id" %}style="font-family:var(--mono);font-size:11px;color:var(--t2)"{% endif %}>
+          </td>
+          {% endfor %}
+          {% if on_delete %}
+          <td>
+            <button class="btn btn-danger btn-sm"
+                    @click="
+                      const h = {'X-Channel-Id': $store.app.channel.id || ''};
+                      fetch(`${window.__CONFIG__.apiBase}/{{ store_path }}/` + row.id,
+                            {method:'DELETE', headers: h})
+                    ">
+              Delete
+            </button>
+          </td>
+          {% endif %}
+        </tr>
+      </template>
+      <template x-if="$store.app.{{ store_path }}.length === 0">
+        <tr>
+          <td colspan="{{ cols|length + (1 if on_delete else 0) }}"
+              style="text-align:center;padding:32px;color:var(--t2)">
+            No items yet.
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+{% endmacro %}
+
+{# card_list — vertical list of cards bound to a store array.
+   store_path:    dot-notation path to an array
+   title_field:   field name to use as card title (default "name")
+   subtitle_field: field name for subtitle (default "value") #}
+{% macro card_list(store_path, title_field="name", subtitle_field="value") %}
+<div x-show="$store.app.{{ store_path }}.length > 0">
+  <template x-for="item in $store.app.{{ store_path }}" :key="item.id">
+    <div class="card card-pad" style="margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:600;color:var(--t0)" x-text="item.{{ title_field }}"></div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px" x-text="item.{{ subtitle_field }}"></div>
+    </div>
+  </template>
+</div>
+<div x-show="$store.app.{{ store_path }}.length === 0" x-cloak>
+  <div class="empty-state">
+    <div class="empty-state-title">Nothing here yet</div>
+  </div>
+</div>
+{% endmacro %}
