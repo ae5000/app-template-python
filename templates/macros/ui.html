@@ -90,7 +90,7 @@
    title_field:   field name to use as card title (default "name")
    subtitle_field: field name for subtitle (default "value") #}
 {% macro card_list(store_path, title_field="name", subtitle_field="value") %}
-<div x-show="$store.app.{{ store_path }}.length > 0">
+<div x-show="$store.app.{{ store_path }}.length > 0" x-cloak>
   <template x-for="item in $store.app.{{ store_path }}" :key="item.id">
     <div class="card card-pad" style="margin-bottom:8px;">
       <div style="font-size:13px;font-weight:600;color:var(--t0)" x-text="item.{{ title_field }}"></div>

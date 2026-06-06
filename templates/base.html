@@ -18,7 +18,7 @@
   window.__CONFIG__ = {
     rootPath: {{ request.root_path | tojson }},
     apiBase:  {{ (request.root_path + "/api") | tojson }},
-    wsBase:   "ws://{{ request.headers.get('host', 'localhost') }}{{ request.root_path }}",
+    wsBase:   {{ ("ws://" + request.headers.get("host", "localhost") + request.root_path) | tojson }},
   };
   window.initAppStore();
   </script>
