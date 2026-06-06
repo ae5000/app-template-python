@@ -173,9 +173,9 @@ async def delete_item(
     user: PlatformUser = Depends(current_user),
     channel_id: str | None = Header(None, alias="X-Channel-Id"),
 ):
-    user.require_group("engineering")
     if item_id not in _items:
         raise HTTPException(status_code=404, detail="Item not found")
+    user.require_group("engineering")
     del _items[item_id]
     await push(channel_id, {"op": "remove", "path": "items", "id": item_id})
     return {"deleted": item_id}

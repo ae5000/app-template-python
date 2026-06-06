@@ -39,6 +39,11 @@ def test_api_delete_item(client):
     assert r.status_code == 200
     assert client.get(f"/api/items/{created['id']}").status_code == 404
 
+def test_api_delete_requires_item_exists(client):
+    # Delete non-existent item returns 404 (404 check happens before auth check)
+    r = client.delete("/api/items/nonexistent-id")
+    assert r.status_code == 404
+
 def test_root_path_default(client):
     # FastAPI root_path is "" by default in tests
     r = client.get("/api/items")
