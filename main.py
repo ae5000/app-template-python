@@ -89,6 +89,8 @@ async def channel_ws(websocket: WebSocket, channel_id: str):
         while True:
             await websocket.receive_text()  # keep-alive; client sends nothing
     except WebSocketDisconnect:
+        pass
+    finally:
         _channels.pop(channel_id, None)
 
 
