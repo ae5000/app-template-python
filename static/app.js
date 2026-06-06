@@ -75,16 +75,16 @@ async function createChannel() {
   }
 }
 
-function openChannelWS(channelId, store) {
+function openChannelWS(channelId) {
   const ws = new WebSocket(`${CONFIG.wsBase}/ws/channel/${channelId}`);
-  ws.onopen  = () => { store.channel.wsStatus = "connected"; };
-  ws.onclose = () => { store.channel.wsStatus = "disconnected"; };
-  ws.onerror = () => { store.channel.wsStatus = "error"; };
+  ws.onopen  = () => { Alpine.store("app").channel.wsStatus = "connected"; };
+  ws.onclose = () => { Alpine.store("app").channel.wsStatus = "disconnected"; };
+  ws.onerror = () => { Alpine.store("app").channel.wsStatus = "error"; };
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
-      if (msg.type === "batch") msg.patches.forEach(p => applyPatch(store, p));
-      else applyPatch(store, msg);
+      if (msg.type === "batch") msg.patches.forEach(p => applyPatch(Alpine.store("app"), p));
+      else applyPatch(Alpine.store("app"), msg);
     } catch { /* ignore malformed messages */ }
   };
   return ws;
@@ -139,14 +139,15 @@ window.initAppStore = function () {
     Alpine.store("app", store);
 
     // Load data + open WS channel asynchronously (store is already registered above).
+    // Must use Alpine.store("app") (the reactive proxy) for mutations to trigger DOM updates.
     Promise.all([
       fetch(`${CONFIG.apiBase}/items`).then(r => r.ok ? r.json() : []).catch(() => []),
       createChannel(),
     ]).then(([items, channelId]) => {
-      applyPatch(store, { op: "set", path: "items", value: items });
+      applyPatch(Alpine.store("app"), { op: "set", path: "items", value: items });
       if (channelId) {
-        store.channel.id = channelId;
-        openChannelWS(channelId, store);
+        Alpine.store("app").channel.id = channelId;
+        openChannelWS(channelId);
       }
     });
   });

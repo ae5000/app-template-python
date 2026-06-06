@@ -54,7 +54,7 @@
    submit_label: text for the submit button (default "Create") #}
 {% macro create_form(action, fields, submit_label="Create") %}
 {% set field_names = fields | map(attribute='name') | list %}
-<form x-data="platformForm({ action: {{ action | tojson }}, fields: {{ field_names | tojson }} })"
+<form x-data='platformForm({ action: {{ action | tojson }}, fields: {{ field_names | tojson }} })'
       @submit.prevent="submit()"
       style="margin-bottom:24px">
   {% for f in fields %}

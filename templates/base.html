@@ -6,8 +6,8 @@
   <title>{% block page_title %}App{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap"/>
-  <link rel="stylesheet" href="{{ request.root_path }}/static/app.css"/>
-  <script src="{{ request.root_path }}/static/app.js"></script>
+  <link rel="stylesheet" href="{{ request.root_path }}/static/app.css?v={{ static_version }}"/>
+  <script src="{{ request.root_path }}/static/app.js?v={{ static_version }}"></script>
   <script defer
           src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"
           integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"

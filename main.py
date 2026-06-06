@@ -18,6 +18,8 @@ init_platform(app)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+_STATIC_VERSION = str(int(os.path.getmtime("static/app.js")))
+
 # ---------------------------------------------------------------------------
 # In-memory stores
 # ---------------------------------------------------------------------------
@@ -104,6 +106,7 @@ async def ui_items(request: Request, user: PlatformUser = Depends(current_user))
     return templates.TemplateResponse(request, "pages/items.html", {
         "user": _user_ctx(user),
         "items": items,
+        "static_version": _STATIC_VERSION,
     })
 
 
@@ -116,6 +119,7 @@ async def ui_item_detail(
     return templates.TemplateResponse(request, "pages/item_detail.html", {
         "user": _user_ctx(user),
         "item": {"id": item_id, **_items[item_id]},
+        "static_version": _STATIC_VERSION,
     })
 
 
