@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>{% block page_title %}App{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap"/>
+  <link rel="stylesheet" href="{{ request.root_path }}/static/app.css"/>
+  <script src="{{ request.root_path }}/static/app.js"></script>
+  <script defer
+          src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"
+          integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"
+          crossorigin="anonymous"></script>
+  {% block extra_head %}{% endblock %}
+  <script>
+  window.__USER__   = {{ user | tojson }};
+  window.__CONFIG__ = {
+    rootPath: {{ request.root_path | tojson }},
+    apiBase:  {{ (request.root_path + "/api") | tojson }},
+    wsBase:   "ws://{{ request.headers.get('host', 'localhost') }}{{ request.root_path }}",
+  };
+  window.initAppStore();
+  </script>
+</head>
+<body x-data>
+<div class="shell">
+
+  {# ── Rail: app switcher — static placeholder, future: gateway-controlled ── #}
+  <nav class="rail" aria-label="App switcher">
+    <div class="rail-logo" title="Platform">B</div>
+    <div class="rail-sep"></div>
+    <div class="rail-gap"></div>
+    {# FUTURE: platform will inject app icons here #}
+  </nav>
+
+  {# ── App left nav — override nav_panel to remove entirely ── #}
+  {% block nav_panel %}
+  <aside class="nav"
+         :style="$store.app.ui.navCollapsed ? 'width:52px' : 'width:var(--nav)'">
+    <div class="nav-head">
+      <span class="nav-title" x-show="!$store.app.ui.navCollapsed" x-cloak>
+        {% block nav_title %}{% endblock %}
+      </span>
+      <button class="nav-collapse-btn"
+              @click="$store.app.ui.navCollapsed = !$store.app.ui.navCollapsed"
+              :title="$store.app.ui.navCollapsed ? 'Expand' : 'Collapse'">
+        <span x-text="$store.app.ui.navCollapsed ? '›' : '‹'">‹</span>
+      </button>
+    </div>
+    <div class="nav-list" x-show="!$store.app.ui.navCollapsed" x-cloak>
+      {% block left_nav %}{% endblock %}
+    </div>
+  </aside>
+  {% endblock nav_panel %}
+
+  <div class="main">
+
+    {# ── Topbar — override topbar_panel to remove entirely ── #}
+    {% block topbar_panel %}
+    <header class="topbar">
+      <div class="bc">
+        <span class="bc-app">{% block topbar_title %}{% endblock %}</span>
+        {% block topbar_breadcrumb %}{% endblock %}
+      </div>
+      <div class="tbr">
+        {# WS status indicator — dims when offline #}
+        <span style="font-size:10px;font-family:var(--mono)"
+              x-text="$store.app.channel.wsStatus === 'connected' ? '● live' : '○ offline'"
+              :style="$store.app.channel.wsStatus === 'connected'
+                ? 'color:var(--green)' : 'color:var(--t3)'">
+        </span>
+        {% block topbar_right %}{% endblock %}
+      </div>
+    </header>
+    {% endblock topbar_panel %}
+
+    {# ── Global progress bar — driven by $store.app.ui.progress (0-100 or null) ── #}
+    <div class="pbar" x-show="$store.app.ui.progress !== null" x-cloak>
+      <div class="pbar-fill" :style="`width:${$store.app.ui.progress ?? 0}%`"></div>
+    </div>
+
+    {# ── Body ── #}
+    <div class="content">
+      <main class="page">
+        {% block body %}{% endblock %}
+      </main>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
