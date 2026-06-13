@@ -41,12 +41,20 @@ tests/
   test_ui.py                     # HTML route tests
 ```
 
-## Platform SDK
+## Platform Auth
+
+No external SDK. Copy `platform_auth.py` into the service root. Import from it directly:
 
 ```python
-from platform_sdk import init_platform, current_user, PlatformUser
+from platform_auth import PlatformAuthMiddleware, platform_lifespan, current_user, PlatformUser
 
-init_platform(app)  # call once after creating FastAPI app
+@asynccontextmanager
+async def lifespan(app):
+    async with platform_lifespan(app):  # registers with platform, starts heartbeat
+        yield
+
+app = FastAPI(title="my-service", root_path=ROOT_PATH, lifespan=lifespan)
+app.add_middleware(PlatformAuthMiddleware)  # validates X-Platform-Auth on every request
 
 # Dependency — injects authenticated user into any route
 async def my_route(user: PlatformUser = Depends(current_user)):
@@ -56,7 +64,48 @@ async def my_route(user: PlatformUser = Depends(current_user)):
     user.require_group("engineering")  # raises 403 if not in group
 ```
 
-Set `SKIP_PLATFORM_AUTH=true` in env to bypass auth in dev/tests. Mock user gets `user_id="dev_user"`, `email="dev@local"`, `groups=["admin", "engineering"]`.
+Dev bypass: set `DEV_MOCK_USER=email:group1,group2` to skip auth. Mock user gets those values.
+
+```bash
+DEV_MOCK_USER=dev@local:engineering,admin uvicorn main:app --reload
+```
+
+## CLI + MCP Exposure
+
+Routes are invisible to `bgrx` CLI and Claude Desktop MCP by default. Add `openapi_extra` to surface them:
+
+```python
+@app.get(
+    "/api/items",
+    response_model=list[ItemResponse],
+    summary="List all items",
+    openapi_extra={"x-platform": {
+        "cli": {
+            "command": "my-service list-items",  # → bgrx my-service list-items
+            # "args": [
+            #   {"name": "status", "type": "string", "required": False, "choices": ["open","done"]},
+            #   {"name": "id", "type": "string", "required": True, "positional": True},
+            # ]
+        }
+        # "mcp" omitted → auto-derived: tool_name = "my-service_list-items"
+        # "mcp": False  → CLI only, suppress MCP tool
+    }},
+)
+```
+
+**`cli.command` format:** `"<service> <subcommand>"` — first word becomes the `bgrx` command group, rest becomes the subcommand. Must match `platform.yaml` `service.name`.
+
+**`cli.args`** — optional list of query/body params to expose as CLI flags:
+
+| field | values |
+|---|---|
+| `name` | param name |
+| `type` | `"string"`, `"integer"`, `"boolean"` |
+| `required` | `true` / `false` |
+| `choices` | list of allowed values |
+| `positional` | `true` → positional arg instead of `--flag` |
+
+**MCP auto-derive:** if `mcp` is omitted, manifest builder creates `tool_name = command.replace(" ", "_")` and copies `summary` as description. Set `"mcp": False` to suppress MCP entirely for a route.
 
 ## ROOT_PATH
 
@@ -264,21 +313,19 @@ All variables are defined in `static/app.css` `:root`. Only these exist — do n
 
 ## Testing
 
-Run tests with the venv that has `platform_sdk` installed:
-
 ```bash
-SKIP_PLATFORM_AUTH=true .venv312/bin/pytest tests/ -q
+DEV_MOCK_USER=dev@local:engineering,admin .venv/bin/pytest tests/ -q
 ```
 
 The `conftest.py` has:
 - `client` fixture — `TestClient(app)` with lifespan
 - `reset_items` / `reset_channels` — `autouse=True` fixtures that clear in-memory stores before each test
 
-Tests import `main.py` which imports `platform_sdk`. Set `SKIP_PLATFORM_AUTH=true` before import to inject mock user; `conftest.py` does this in module scope:
+Set `DEV_MOCK_USER` before import to inject mock user; `conftest.py` does this in module scope:
 
 ```python
 import os
-os.environ["SKIP_PLATFORM_AUTH"] = "true"
+os.environ["DEV_MOCK_USER"] = "dev@local:engineering,admin"
 ```
 
 ---
