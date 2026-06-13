@@ -17,7 +17,7 @@ from platform_auth import PlatformAuthMiddleware, platform_lifespan, current_use
 
 @asynccontextmanager
 async def lifespan(app):
-    async with platform_lifespan():
+    async with platform_lifespan(app):
         yield
 
 
@@ -152,7 +152,14 @@ async def ui_item_detail(
 
 
 # ---------------------------------------------------------------------------
-# API routes  (JSON — also used by CLI / MCP)
+# API routes  (JSON — also surfaced to CLI + MCP via x-platform annotation)
+# ---------------------------------------------------------------------------
+# openapi_extra={"x-platform": {"cli": {"command": "<service> <subcommand>", "args": [...]}}}
+#
+# "command" → bgrx <service> <subcommand>  (first word = service group)
+# "args"    → list of {name, type, required, choices, positional}
+# "mcp"     → auto-derived from cli.command (tool_name = command with spaces→underscores)
+#             set "mcp": False to suppress MCP exposure for a route
 # ---------------------------------------------------------------------------
 
 @app.get(
@@ -160,6 +167,7 @@ async def ui_item_detail(
     response_model=list[ItemResponse],
     operation_id="list_items",
     summary="List all items",
+    openapi_extra={"x-platform": {"cli": {"command": "my-service list-items"}}},
 )
 async def list_items(user: PlatformUser = Depends(current_user)):
     return [{"id": k, **v} for k, v in _items.items()]
@@ -170,6 +178,10 @@ async def list_items(user: PlatformUser = Depends(current_user)):
     response_model=ItemResponse,
     operation_id="create_item",
     summary="Create an item",
+    openapi_extra={"x-platform": {"cli": {"command": "my-service create-item", "args": [
+        {"name": "name", "type": "string", "required": True},
+        {"name": "description", "type": "string", "required": False},
+    ]}}},
 )
 async def create_item(
     item: Item,
