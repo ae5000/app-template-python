@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "macros/layout.html" import page_header, section_header %}
+
+{% block page_title %}Job Runner{% endblock %}
+{% block nav_title %}Jobs{% endblock %}
+{% block topbar_title %}Jobs{% endblock %}
+
+{% block left_nav %}
+  {{ section_header("Job Runner") }}
+  <div class="nav-item active">
+    <div class="ni-body">
+      <div class="ni-name">Batch Export</div>
+      <div class="ni-meta" x-text="$store.app.job.status">idle</div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block topbar_right %}
+  <span class="badge"
+        x-show="$store.app.job.status !== 'idle'"
+        x-cloak
+        :class="{
+          'badge-running': $store.app.job.status === 'running',
+          'badge-done':    $store.app.job.status === 'done',
+          'badge-error':   $store.app.job.status === 'error'
+        }"
+        x-text="$store.app.job.status"></span>
+{% endblock %}
+
+{% block body %}
+<div class="page-pad" x-data="{
+  async start() {
+    Alpine.store('app').job = { id: null, status: 'running', progress: 0, log: [] };
+    const headers = {};
+    const cid = Alpine.store('app').channel.id;
+    if (cid) headers['X-Channel-Id'] = cid;
+    const r = await fetch(window.__CONFIG__.apiBase + '/jobs', { method: 'POST', headers });
+    if (!r.ok) {
+      Alpine.store('app').job.status = 'error';
+    }
+  },
+  reset() {
+    Alpine.store('app').job = { id: null, status: 'idle', progress: 0, log: [] };
+  }
+}">
+
+  {{ page_header("Job Runner", "Simulates a 180-second batch export with live progress via WebSocket.") }}
+
+  {# ── Controls ── #}
+  <div class="job-controls">
+    <button type="button" class="btn btn-white btn-sm"
+            @click="start()"
+            :disabled="$store.app.job.status === 'running'">
+      <span x-text="$store.app.job.status === 'running' ? 'Running…' : 'Start Job'">Start Job</span>
+    </button>
+    <button type="button" class="btn btn-ghost btn-sm"
+            x-show="$store.app.job.status === 'done' || $store.app.job.status === 'error'"
+            x-cloak
+            @click="reset()">
+      Reset
+    </button>
+  </div>
+
+  {# ── Progress ── #}
+  <div x-show="$store.app.job.status !== 'idle'" x-cloak>
+
+    <div class="job-progress-header">
+      <span class="job-progress-label">Progress</span>
+      <span class="job-progress-pct" x-text="$store.app.job.progress + '%'">0%</span>
+    </div>
+
+    <div class="job-progress">
+      <div class="job-progress-fill" :style="'width:' + $store.app.job.progress + '%'"></div>
+    </div>
+
+    <p class="job-status-done" x-show="$store.app.job.status === 'done'" x-cloak>
+      ✓ Completed — 18,000 records exported
+    </p>
+    <p class="job-status-running" x-show="$store.app.job.status === 'running'" x-cloak
+       x-text="'Step ' + Math.round($store.app.job.progress / (100/36)) + ' of 36 — next update in ~5s'">
+    </p>
+
+  </div>
+
+  {# ── Log ── #}
+  <div class="job-log-section" x-show="$store.app.job.log.length > 0" x-cloak>
+
+    <div class="job-log-header">Output</div>
+
+    <div class="job-log"
+         x-ref="log"
+         x-effect="$store.app.job.log.length && $nextTick(() => { $refs.log.scrollTop = $refs.log.scrollHeight })">
+      <template x-for="(line, i) in $store.app.job.log" :key="i">
+        <div class="job-log-line" x-text="line"></div>
+      </template>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

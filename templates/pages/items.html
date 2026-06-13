@@ -24,12 +24,6 @@
   </div>
 {% endblock %}
 
-{% block topbar_right %}
-  <span class="badge badge-neu"
-        x-text="$store.app.items.length + ' item' + ($store.app.items.length === 1 ? '' : 's')">
-  </span>
-{% endblock %}
-
 {% block body %}
 <div class="page-pad">
 
@@ -40,6 +34,7 @@
       action="/items",
       fields=[
           {"name": "name",  "label": "Name",  "placeholder": "Enter name"},
+          {"name": "uuid",  "label": "UUID",  "placeholder": "Enter UUID"},
           {"name": "value", "label": "Value", "placeholder": "Enter value"},
       ],
       submit_label="Create Item"
@@ -51,9 +46,11 @@
       columns=[
           {"field": "id",    "label": "ID"},
           {"field": "name",  "label": "Name"},
+          {"field": "uuid",  "label": "UUID"},
           {"field": "value", "label": "Value"},
       ],
-      on_delete=True
+      on_delete=True,
+      detail_path="/items"
   ) }}
 
 </div>

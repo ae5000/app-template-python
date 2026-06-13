@@ -32,6 +32,12 @@
     <div class="rail-sep"></div>
     <div class="rail-gap"></div>
     {# FUTURE: platform will inject app icons here #}
+    {% if debug_show_state %}
+    <button type="button" class="ibtn ibtn-debug" title="Debug: view store state"
+            @click="$store.app.ui.debugOpen = true">
+      {}
+    </button>
+    {% endif %}
   </nav>
 
   {# ── App left nav — override nav_panel to remove entirely ── #}
@@ -64,12 +70,16 @@
         {% block topbar_breadcrumb %}{% endblock %}
       </div>
       <div class="tbr">
-        {# WS status indicator — dims when offline #}
-        <span style="font-size:10px;font-family:var(--mono)"
-              x-text="$store.app.channel.wsStatus === 'connected' ? '● live' : '○ offline'"
-              :style="$store.app.channel.wsStatus === 'connected'
-                ? 'color:var(--green)' : 'color:var(--t3)'">
-        </span>
+        <nav class="tbr-nav" aria-label="App pages">
+          <a href="{{ request.root_path }}/"
+             class="btn btn-ghost btn-sm{% if request.url.path == '/' or request.url.path.startswith('/items') %} tbr-nav-active{% endif %}">
+            Items
+          </a>
+          <a href="{{ request.root_path }}/jobs"
+             class="btn btn-ghost btn-sm{% if request.url.path.startswith('/jobs') %} tbr-nav-active{% endif %}">
+            Jobs
+          </a>
+        </nav>
         {% block topbar_right %}{% endblock %}
       </div>
     </header>
@@ -89,5 +99,23 @@
 
   </div>
 </div>
+{% if debug_show_state %}
+<div class="modal-overlay"
+     x-show="$store.app.ui.debugOpen"
+     x-cloak
+     @click.self="$store.app.ui.debugOpen = false"
+     @keydown.escape.window="$store.app.ui.debugOpen = false">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Store state">
+    <div class="modal-head">
+      <span class="modal-title">$store.app</span>
+      <button type="button" class="btn btn-ghost btn-sm"
+              @click="$store.app.ui.debugOpen = false">✕</button>
+    </div>
+    <div class="modal-body">
+      <pre x-text="JSON.stringify($store.app, null, 2)"></pre>
+    </div>
+  </div>
+</div>
+{% endif %}
 </body>
 </html>

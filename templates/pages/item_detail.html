@@ -1,10 +1,27 @@
 {% extends "base.html" %}
-{% from "macros/layout.html" import page_header %}
+{% from "macros/layout.html" import page_header, section_header, empty_state %}
 {% from "macros/ui.html" import badge %}
 
 {% block page_title %}{{ item.name }}{% endblock %}
 {% block nav_title %}Items{% endblock %}
 {% block topbar_title %}Items{% endblock %}
+
+{% block left_nav %}
+  {{ section_header("All Items") }}
+  <template x-for="it in $store.app.items" :key="it.id">
+    <div class="nav-item"
+         :class="{'active': it.id === {{ item.id | tojson }}}"
+         @click="window.location.href = window.__CONFIG__.rootPath + '/items/' + it.id">
+      <div class="ni-body">
+        <div class="ni-name" x-text="it.name"></div>
+        <div class="ni-meta" x-text="it.value"></div>
+      </div>
+    </div>
+  </template>
+  <div x-show="$store.app.items.length === 0" x-cloak>
+    {{ empty_state("No items", "") }}
+  </div>
+{% endblock %}
 
 {% block topbar_breadcrumb %}
   <span class="bc-sep">›</span>
@@ -30,12 +47,12 @@
     This pattern works for any resource: find it in the store array by id,
     fall back to SSR data while the store loads.
   #}
-  <div x-data="{
+  <div x-data='{
     get item() {
       return $store.app.items.find(i => i.id === {{ item.id | tojson }})
              || {{ item | tojson }};
     }
-  }">
+  }'>
 
     <div class="card card-pad section">
       <div class="sec-label">Name</div>

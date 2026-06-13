@@ -32,11 +32,12 @@
 {% endmacro %}
 
 {# live_table — table driven by an array in the Alpine store.
-   store_path: dot-notation path to an array (e.g. "items")
-   columns:    list of dicts with "field" and "label" keys.
-               If omitted, renders id/name/value columns (matches the items demo).
-   on_delete:  if True, renders a delete button that calls DELETE /api/{store_path}/{item.id} #}
-{% macro live_table(store_path, columns=None, on_delete=False) %}
+   store_path:  dot-notation path to an array (e.g. "items")
+   columns:     list of dicts with "field" and "label" keys.
+                If omitted, renders id/name/value columns (matches the items demo).
+   on_delete:   if True, renders a delete button that calls DELETE /api/{store_path}/{item.id}
+   detail_path: if set (e.g. "/items"), rows navigate to detail_path/row.id on click #}
+{% macro live_table(store_path, columns=None, on_delete=False, detail_path=None) %}
 {% set cols = columns or [
   {"field": "id",    "label": "ID"},
   {"field": "name",  "label": "Name"},
@@ -52,7 +53,8 @@
     </thead>
     <tbody>
       <template x-for="row in $store.app.{{ store_path }}" :key="row.id">
-        <tr>
+        <tr{% if detail_path %} class="tr-link"
+            @click="window.location.href = window.__CONFIG__.rootPath + '{{ detail_path }}/' + row.id"{% endif %}>
           {% for col in cols %}
           <td x-text="row.{{ col.field }}"
               {% if col.field == "id" %}style="font-family:var(--mono);font-size:11px;color:var(--t2)"{% endif %}>
@@ -61,7 +63,7 @@
           {% if on_delete %}
           <td>
             <button class="btn btn-danger btn-sm"
-                    @click="
+                    @click.stop="
                       const h = {'X-Channel-Id': $store.app.channel.id || ''};
                       fetch(`${window.__CONFIG__.apiBase}/{{ store_path }}/` + row.id,
                             {method:'DELETE', headers: h})

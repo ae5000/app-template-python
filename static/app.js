@@ -130,9 +130,10 @@ window.initAppStore = function () {
   document.addEventListener("alpine:init", () => {
     // Build initial store shape synchronously — must complete before Alpine walks DOM.
     const store = {
-      ui:      { navItem: null, navCollapsed: false, progress: null },
+      ui:      { navItem: null, navCollapsed: false, progress: null, debugOpen: false },
       user:    window.__USER__ || { id: null, name: "—", initials: "?", email: "" },
       items:   [],
+      job:     { id: null, status: "idle", progress: 0, log: [] },
       channel: { id: null, wsStatus: "disconnected" },
     };
 

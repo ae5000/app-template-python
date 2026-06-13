@@ -1,4 +1,23 @@
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 .env
+
+# Claude/superpowers session artifacts
+.superpowers/
+docs/superpowers/
+
+# Python build artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+
+# Logs
+*.log

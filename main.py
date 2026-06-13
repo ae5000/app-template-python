@@ -1,5 +1,7 @@
+import asyncio
 import os
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import (
     FastAPI, Depends, HTTPException, Header, Request,
@@ -9,11 +11,34 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from platform_sdk import init_platform, current_user, PlatformUser
+
+from platform_auth import PlatformAuthMiddleware, platform_lifespan, current_user, PlatformUser
+
+
+@asynccontextmanager
+async def lifespan(app):
+    async with platform_lifespan():
+        yield
+
 
 ROOT_PATH = os.getenv("ROOT_PATH", "")
-app = FastAPI(title="my-service", root_path=ROOT_PATH)
-init_platform(app)
+app = FastAPI(title="my-service", root_path=ROOT_PATH, lifespan=lifespan)
+app.add_middleware(PlatformAuthMiddleware)
+
+
+def _read_debug_flag() -> bool:
+    try:
+        path = os.path.expanduser("~/.bgrx-agents/debug.yaml")
+        with open(path) as f:
+            for line in f:
+                if line.strip().startswith("show_state:"):
+                    return line.split(":", 1)[1].strip().lower() in ("true", "yes", "1")
+    except Exception:
+        pass
+    return False
+
+
+_DEBUG_SHOW_STATE = _read_debug_flag()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -26,6 +51,7 @@ _STATIC_VERSION = str(int(os.path.getmtime("static/app.js")))
 
 _items: dict[str, dict] = {}
 _channels: dict[str, dict] = {}  # channel_id -> {"user_id": str, "ws": WebSocket | None}
+_jobs: dict[str, dict] = {}      # job_id -> {"status": str, "progress": int, "log": list}
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +133,7 @@ async def ui_items(request: Request, user: PlatformUser = Depends(current_user))
         "user": _user_ctx(user),
         "items": items,
         "static_version": _STATIC_VERSION,
+        "debug_show_state": _DEBUG_SHOW_STATE,
     })
 
 
@@ -120,6 +147,7 @@ async def ui_item_detail(
         "user": _user_ctx(user),
         "item": {"id": item_id, **_items[item_id]},
         "static_version": _STATIC_VERSION,
+        "debug_show_state": _DEBUG_SHOW_STATE,
     })
 
 
@@ -183,3 +211,65 @@ async def delete_item(
     del _items[item_id]
     await push(channel_id, {"op": "remove", "path": "items", "id": item_id})
     return {"deleted": item_id}
+
+
+# ---------------------------------------------------------------------------
+# Jobs — long-running task demo
+# ---------------------------------------------------------------------------
+
+_JOB_STEPS = 36          # 5s × 36 = 180s total
+_JOB_STEP_SECS = 5
+_JOB_BATCH_SIZE = 500    # records per step (cosmetic)
+
+_JOB_PREAMBLE = [
+    "Connecting to source database",
+    "Validating schema and permissions",
+    "Counting source records: found 18,000",
+    "Allocating output buffer",
+]
+
+
+async def _run_job(job_id: str, channel_id: str | None) -> None:
+    for msg in _JOB_PREAMBLE:
+        await asyncio.sleep(1)
+        _jobs[job_id]["log"].append(msg)
+        await push(channel_id, {"op": "append-log", "path": "job.log", "value": msg})
+
+    for step in range(1, _JOB_STEPS + 1):
+        await asyncio.sleep(_JOB_STEP_SECS)
+        progress = round(step * 100 / _JOB_STEPS)
+        lo = (step - 1) * _JOB_BATCH_SIZE + 1
+        hi = step * _JOB_BATCH_SIZE
+        msg = f"[{step:02d}/{_JOB_STEPS}] Exported records {lo:,}–{hi:,}"
+        _jobs[job_id]["progress"] = progress
+        _jobs[job_id]["log"].append(msg)
+        await push(channel_id, {"op": "set",        "path": "job.progress", "value": progress})
+        await push(channel_id, {"op": "append-log", "path": "job.log",      "value": msg})
+
+    _jobs[job_id]["status"] = "done"
+    await push(channel_id, {"op": "append-log", "path": "job.log",    "value": "Export complete — 18,000 records written"})
+    await push(channel_id, {"op": "set",        "path": "job.status", "value": "done"})
+
+
+@app.get("/jobs", response_class=HTMLResponse, include_in_schema=False)
+async def ui_jobs(request: Request, user: PlatformUser = Depends(current_user)):
+    return templates.TemplateResponse(request, "pages/jobs.html", {
+        "user": _user_ctx(user),
+        "static_version": _STATIC_VERSION,
+        "debug_show_state": _DEBUG_SHOW_STATE,
+    })
+
+
+@app.post(
+    "/api/jobs",
+    operation_id="create_job",
+    summary="Start a long-running background job (180s)",
+)
+async def create_job(
+    user: PlatformUser = Depends(current_user),
+    channel_id: str | None = Header(None, alias="X-Channel-Id"),
+):
+    job_id = str(uuid.uuid4())[:8]
+    _jobs[job_id] = {"status": "running", "progress": 0, "log": []}
+    asyncio.create_task(_run_job(job_id, channel_id))
+    return {"job_id": job_id}
