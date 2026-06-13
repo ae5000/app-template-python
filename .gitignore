@@ -21,3 +21,5 @@ build/
 
 # Logs
 *.log
+
+sample_ui/
