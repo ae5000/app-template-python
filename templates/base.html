@@ -60,12 +60,13 @@
     </a>
     <div class="rail-sep"></div>
     <template x-for="svc in $store.platform.navServices" :key="svc.name">
-      <a class="rail-svc" :href="_safeUrl(svc.app_url)" :aria-label="svc.name"
+      <a class="rail-svc" x-data="{iconErr:false}" :href="_safeUrl(svc.app_url)" :aria-label="svc.name"
          :style="'background:'+_svcColor(svc.name)"
          @mouseenter="$store.platform.railTip={show:true,name:svc.name,y:$el.getBoundingClientRect().top+$el.offsetHeight/2}"
          @mouseleave="$store.platform.railTip.show=false">
-        <img x-show="svc.icon_url" :src="svc.icon_url||''" class="rail-svc-img" alt="">
-        <span x-show="!svc.icon_url" x-text="svc.name.charAt(0).toUpperCase()"></span>
+        <img x-show="!iconErr" :src="_safeUrl(svc.app_url).replace(/\/+$/,'')+'/static/icon.svg'"
+             class="rail-svc-img" alt="" @error="iconErr=true">
+        <span x-show="iconErr" x-text="svc.name.charAt(0).toUpperCase()"></span>
       </a>
     </template>
     <div class="rail-gap"></div>
@@ -85,7 +86,7 @@
       <span class="nav-title" x-show="!$store.app.ui.navCollapsed" x-cloak>
         {% block nav_title %}{% endblock %}
       </span>
-      <button class="nav-collapse-btn"
+      <button type="button" class="nav-collapse-btn"
               @click="$store.app.ui.navCollapsed = !$store.app.ui.navCollapsed"
               :title="$store.app.ui.navCollapsed ? 'Expand' : 'Collapse'">
         <span x-text="$store.app.ui.navCollapsed ? '›' : '‹'">‹</span>
