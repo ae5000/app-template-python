@@ -32,7 +32,7 @@
   }
 
   document.addEventListener('alpine:init', () => {
-    Alpine.store('platform', { branding: {name:'Platform',logo_url:''}, navServices: [] });
+    Alpine.store('platform', { branding: {name:'Platform',logo_url:''}, navServices: [], railTip: {show:false,name:'',y:0} });
     Promise.all([
       fetch('/__platform/branding').then(r => r.ok ? r.json() : {}),
       fetch('/__platform/nav').then(r => r.ok ? r.json() : []),
@@ -60,8 +60,10 @@
     </a>
     <div class="rail-sep"></div>
     <template x-for="svc in $store.platform.navServices" :key="svc.name">
-      <a class="rail-svc" :href="_safeUrl(svc.app_url)" :title="svc.name"
-         :aria-label="svc.name" :style="'background:'+_svcColor(svc.name)">
+      <a class="rail-svc" :href="_safeUrl(svc.app_url)" :aria-label="svc.name"
+         :style="'background:'+_svcColor(svc.name)"
+         @mouseenter="$store.platform.railTip={show:true,name:svc.name,y:$el.getBoundingClientRect().top+$el.offsetHeight/2}"
+         @mouseleave="$store.platform.railTip.show=false">
         <img x-show="svc.icon_url" :src="svc.icon_url||''" class="rail-svc-img" alt="">
         <span x-show="!svc.icon_url" x-text="svc.name.charAt(0).toUpperCase()"></span>
       </a>
@@ -152,5 +154,7 @@
   </div>
 </div>
 {% endif %}
+<div x-show="$store.platform.railTip.show" x-cloak class="rail-tip"
+     :style="'top:'+$store.platform.railTip.y+'px'" x-text="$store.platform.railTip.name"></div>
 </body>
 </html>
