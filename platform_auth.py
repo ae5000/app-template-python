@@ -39,6 +39,26 @@ _REGISTER_BACKOFF = [1, 2, 4, 8, 16]
 
 
 # ---------------------------------------------------------------------------
+# Secret reader — reads from Docker Swarm secrets, falls back to env var
+# ---------------------------------------------------------------------------
+
+def read_secret(name: str, default: str = "") -> str:
+    """Read a secret value mounted by Docker Swarm, falling back to an env var.
+
+    In production, secrets are mounted at /run/secrets/<name> by provision-service.sh.
+    In local dev, the value is read from the environment variable <name> instead.
+
+    Usage:
+        db_url = read_secret("DATABASE_URL")
+        api_key = read_secret("MY_API_KEY")
+    """
+    try:
+        return open(f"/run/secrets/{name}").read().strip()  # noqa: SIM115
+    except FileNotFoundError:
+        return os.environ.get(name, default)
+
+
+# ---------------------------------------------------------------------------
 # User model
 # ---------------------------------------------------------------------------
 
@@ -128,7 +148,7 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
-async def _register_once(config: dict) -> bool:
+async def _register_once(config: dict, openapi: dict | None = None) -> bool:
     svc = config["service"]
     rt = config.get("runtime", {})
     name = svc["name"]
@@ -137,15 +157,20 @@ async def _register_once(config: dict) -> bool:
     token = _env("PLATFORM_TOKEN")
     registry = _env("PLATFORM_REGISTRY_URL", "http://registry:8000")
 
+    app_subdomain = name
+    mcp_subdomain = f"{name}-mcp"
     payload = {
         "name": name,
         "groups": [group] if isinstance(group, str) else group,
         "description": svc.get("description", ""),
         "internal_url": f"http://{name}:{rt.get('port', 8000)}",
-        "app_url": f"https://{name}.{domain}",
-        "mcp_url": f"https://{name}-mcp.{domain}",
+        "app_url": f"https://{app_subdomain}.{domain}",
+        "mcp_url": f"https://{mcp_subdomain}.{domain}",
+        "app_subdomain": app_subdomain,
+        "mcp_subdomain": mcp_subdomain,
         "health_check": rt.get("health_check", "/health"),
         "platform_config": config,
+        "openapi": openapi or {},
     }
 
     try:
@@ -164,9 +189,9 @@ async def _register_once(config: dict) -> bool:
     return False
 
 
-async def _register_with_retry(config: dict) -> None:
+async def _register_with_retry(config: dict, openapi: dict | None = None) -> None:
     for i, delay in enumerate(_REGISTER_BACKOFF):
-        if await _register_once(config):
+        if await _register_once(config, openapi):
             return
         if i < len(_REGISTER_BACKOFF) - 1:
             log.info("retrying registration in %ds", delay)
@@ -190,12 +215,24 @@ async def _heartbeat_loop(name: str) -> None:
 
 
 @asynccontextmanager
-async def platform_lifespan(config_path: str = "platform.yaml") -> AsyncGenerator:
+async def platform_lifespan(app=None, config_path: str = "platform.yaml") -> AsyncGenerator:
     config = _load_config(config_path)
     name = config["service"]["name"]
+    health_path = config.get("runtime", {}).get("health_check", "/health")
+
+    if app is not None:
+        from fastapi import FastAPI as _FastAPI
+        from fastapi.routing import APIRoute
+
+        existing = {r.path for r in app.routes if isinstance(r, APIRoute)}
+        if health_path not in existing:
+            @app.get(health_path, include_in_schema=False)
+            async def _health():
+                return {"status": "ok", "service": name}
 
     if not _env("DEV_MOCK_USER"):
-        await _register_with_retry(config)
+        openapi = app.openapi() if app is not None else None
+        await _register_with_retry(config, openapi)
 
     heartbeat = asyncio.create_task(_heartbeat_loop(name))
     yield

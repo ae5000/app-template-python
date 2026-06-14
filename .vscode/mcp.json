@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "hello-service": {
+      "command": "/Users/alan/.local/bin/bgrx",
+      "args": [
+        "mcp-proxy",
+        "hello-service"
+      ]
+    },
+    "test-clone": {
+      "command": "/Users/alan/.local/bin/bgrx",
+      "args": [
+        "mcp-proxy",
+        "test-clone"
+      ]
+    }
+  }
+}

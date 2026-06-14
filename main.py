@@ -3,16 +3,19 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import (
     FastAPI, Depends, HTTPException, Header, Request,
     WebSocket, WebSocketDisconnect,
 )
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from platform_auth import PlatformAuthMiddleware, platform_lifespan, current_user, PlatformUser
+
+_REGISTRY_URL = os.getenv("PLATFORM_REGISTRY_URL", "http://registry:8000")
 
 
 @asynccontextmanager
@@ -98,6 +101,24 @@ def _user_ctx(user: PlatformUser) -> dict:
 # ---------------------------------------------------------------------------
 # WebSocket channel routes
 # ---------------------------------------------------------------------------
+
+@app.get("/__platform/nav", include_in_schema=False)
+async def platform_nav(request: Request, user: PlatformUser = Depends(current_user)):
+    auth = request.headers.get("X-Platform-Auth", "{}")
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.get(
+            f"{_REGISTRY_URL}/portal/nav-services",
+            headers={"X-Platform-Auth": auth},
+        )
+    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+
+
+@app.get("/__platform/branding", include_in_schema=False)
+async def platform_branding():
+    async with httpx.AsyncClient(timeout=5) as client:
+        r = await client.get(f"{_REGISTRY_URL}/portal/branding")
+    return Response(content=r.content, status_code=r.status_code, media_type="application/json")
+
 
 @app.post("/ws/channel", include_in_schema=False)
 async def create_channel(user: PlatformUser = Depends(current_user)):

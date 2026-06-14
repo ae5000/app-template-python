@@ -21,17 +21,52 @@
     wsBase:   `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${{{ request.root_path | tojson }}}`,
   };
   window.initAppStore();
+
+  function _svcColor(name) {
+    const p=['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6','#f97316','#06b6d4'];
+    let h=0; for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))&0xffff;
+    return p[h%p.length];
+  }
+  function _safeUrl(u) {
+    try { const p=new URL(u); return (p.protocol==='https:'||p.protocol==='http:') ? u : ''; } catch(_) { return ''; }
+  }
+
+  document.addEventListener('alpine:init', () => {
+    Alpine.store('platform', { branding: {name:'Platform',logo_url:''}, navServices: [] });
+    Promise.all([
+      fetch('/__platform/branding').then(r => r.ok ? r.json() : {}),
+      fetch('/__platform/nav').then(r => r.ok ? r.json() : []),
+    ]).then(([b, svcs]) => {
+      Alpine.store('platform').branding = {name:'Platform',logo_url:'',...(b||{})};
+      Alpine.store('platform').navServices = svcs || [];
+    });
+  });
   </script>
 </head>
 <body x-data>
 <div class="shell">
 
-  {# ── Rail: app switcher — static placeholder, future: gateway-controlled ── #}
+  {# ── Rail: platform app switcher ── #}
   <nav class="rail" aria-label="App switcher">
-    <div class="rail-logo" title="Platform">B</div>
+    <a href="/" class="rail-logo"
+       :aria-label="$store.platform.branding.name"
+       :title="$store.platform.branding.name">
+      <template x-if="$store.platform.branding.logo_url">
+        <img :src="$store.platform.branding.logo_url" class="rail-logo-img" alt="">
+      </template>
+      <template x-if="!$store.platform.branding.logo_url">
+        <span x-text="($store.platform.branding.name||'P').charAt(0).toUpperCase()"></span>
+      </template>
+    </a>
     <div class="rail-sep"></div>
+    <template x-for="svc in $store.platform.navServices" :key="svc.name">
+      <a class="rail-svc" :href="_safeUrl(svc.app_url)" :title="svc.name"
+         :aria-label="svc.name" :style="'background:'+_svcColor(svc.name)">
+        <img x-show="svc.icon_url" :src="svc.icon_url||''" class="rail-svc-img" alt="">
+        <span x-show="!svc.icon_url" x-text="svc.name.charAt(0).toUpperCase()"></span>
+      </a>
+    </template>
     <div class="rail-gap"></div>
-    {# FUTURE: platform will inject app icons here #}
     {% if debug_show_state %}
     <button type="button" class="ibtn ibtn-debug" title="Debug: view store state"
             @click="$store.app.ui.debugOpen = true">

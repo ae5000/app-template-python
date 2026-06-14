@@ -9,7 +9,7 @@ Starting point for new bgrx platform services. Includes auth middleware, platfor
 ### 1. Clone and detach from template history
 
 ```bash
-git clone https://github.com/ae5000/app-template-python.git your-service-name
+git clone https://github.com/ae5000/app-template-python.git your-service-name 
 cd your-service-name
 rm -rf .git
 git init

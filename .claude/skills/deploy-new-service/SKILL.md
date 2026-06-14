@@ -50,6 +50,15 @@ expose:
   access:
     require_any_group:        # who can see/call this service
       - engineering
+
+# Optional: provision a dedicated Postgres database (see Step 4b)
+# database:
+#   postgres: true
+
+# Optional: inject secrets from .env.secrets (see Step 4b)
+# secrets:
+#   - MY_API_KEY
+#   - STRIPE_SECRET_KEY
 ```
 
 `name` becomes the subdomain: `https://your-service-name.{domain}`.
@@ -130,22 +139,80 @@ CI deploys on every push to `main` via `docker service update --image ... --upda
 
 ---
 
+## Step 4b — Configure database and secrets (optional)
+
+If your service needs a Postgres database or external API secrets:
+
+**1. In `platform.yaml`**, uncomment the relevant sections:
+
+```yaml
+database:
+  postgres: true   # provisions a dedicated DB + user, stored as DATABASE_URL secret
+
+secrets:
+  - MY_API_KEY     # must have a matching entry in platform-infra/.env.secrets
+  - STRIPE_SECRET_KEY
+```
+
+**2. In `platform-infra/.env.secrets`** (gitignored, create from `.env.secrets.example`):
+
+```
+YOUR_SERVICE_MY_API_KEY=sk-...
+YOUR_SERVICE_STRIPE_SECRET_KEY=sk_live_...
+```
+
+Key naming: `{SERVICE_NAME_WITH_UNDERSCORES_UPPERCASE}_{VAR_NAME}` where hyphens in service name become underscores.
+
+**3. Read secrets in your service** via `platform_auth.read_secret()`:
+
+```python
+from platform_auth import read_secret
+
+DATABASE_URL = read_secret("DATABASE_URL")     # Postgres if database.postgres: true
+MY_API_KEY   = read_secret("MY_API_KEY")       # from secrets: list
+```
+
+`read_secret()` reads `/run/secrets/<name>` in production, falls back to env var in local dev.
+
+---
+
 ## Step 5 — First deploy
 
-First deploy must be done manually via the platform-infra deploy script (CI can't create a service that doesn't exist yet):
+**If the service has no database or secrets** (platform.yaml has none of the optional sections):
 
 ```bash
 cd /path/to/platform-infra
 bash scripts/deploy-service.sh your-service-name
 ```
 
-This script:
-1. Reads manager IP and registry from terraform outputs
-2. Creates the Docker Swarm service on the `platform_platform-internal` network
-3. Connects to `platform_platform-egress` network (for outbound internet access)
-4. Passes `PLATFORM_TOKEN`, `PLATFORM_REGISTRY_URL`, `PLATFORM_DOMAIN` as env vars
+**If the service uses `database.postgres: true` or `secrets:`**, use `provision-service.sh` instead — it creates the Postgres DB, Swarm secrets, and the Docker service in one pass:
 
-After this, all future deploys happen automatically via GitHub CI on push to `main`.
+```bash
+cd /path/to/platform-infra
+# Ensure .env has POSTGRES_ADMIN_URL set (DO managed Postgres admin URL)
+# Ensure .env.secrets has values for all secrets in platform.yaml
+bash scripts/provision-service.sh your-service-name --service-dir=/path/to/your-service
+```
+
+`provision-service.sh` is idempotent — safe to re-run if interrupted. It skips any resource that already exists (checks via `docker secret inspect`).
+
+After first deploy, all future image updates happen automatically via GitHub CI on push to `main`.
+
+---
+
+### What `provision-service.sh` does
+
+1. Parses `platform.yaml` from `--service-dir`
+2. If `database.postgres: true`:
+   - Generates a random password
+   - Creates Postgres user `svc_{service_prefix}` and database `{service_prefix}` (idempotent)
+   - Stores `postgresql://svc_...@host/db?sslmode=require` as Swarm secret `{prefix}_db_url`
+   - Mounts it at `/run/secrets/DATABASE_URL` in the container
+3. For each name in `secrets:`:
+   - Reads `{SERVICE_PREFIX}_{VAR_NAME}` from `.env.secrets`
+   - Creates Swarm secret `{prefix}_{var_lower}`
+   - Mounts it at `/run/secrets/{VAR_NAME}` in the container
+4. Creates the Docker service with `--secret` flags for all secrets
 
 ---
 
@@ -196,5 +263,9 @@ Services run on port `8000` internally. Traefik terminates TLS externally. Never
 | CI deploys to wrong service | Repo name ≠ service name | Set `SWARM_SERVICE_NAME` repo variable |
 | 0 replicas after deploy | Image pull failed | Check DOCR auth, confirm image exists in registry |
 | Docker config update fails: `AlreadyExists` | Docker configs are immutable | Create new versioned config (e.g. `users-config-v2`), update service with `--config-rm old --config-add new` |
+| `read_secret("X")` returns empty string | Secret not mounted | Check Swarm secret exists: `ssh manager 'docker secret ls'`; re-run `provision-service.sh` if missing |
+| `read_secret("DATABASE_URL")` returns env var in prod | `/run/secrets/DATABASE_URL` not mounted | Confirm service was created with `provision-service.sh`, not `deploy-service.sh`; check `docker service inspect` for `Secrets` |
+| `psql: command not found` during provisioning | psql client not installed | `brew install libpq && brew link --force libpq` |
+| `ERROR: Secret value missing from .env.secrets` | Key not in secrets file | Add `{SERVICE_PREFIX}_{VAR}=value` to `platform-infra/.env.secrets` |
 | `bgrx` CLI returns HTML instead of JSON | CF Access blocking programmatic requests | CLI calls go through `cli.bgrx.win/proxy/` — check cli-service is running |
 | WebSocket connects as `ws://` not `wss://` | Traefik always receives HTTP internally | Fixed in template — `wsBase` uses `location.protocol` client-side, not server-side header |

@@ -4,7 +4,7 @@
 const CONFIG = {
   rootPath: window.__CONFIG__?.rootPath ?? "",
   apiBase:  window.__CONFIG__?.apiBase  ?? "/api",
-  wsBase:   window.__CONFIG__?.wsBase   ?? `ws://${location.host}`,
+  wsBase:   window.__CONFIG__?.wsBase   ?? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${window.__CONFIG__?.rootPath ?? ''}`,
 };
 
 // ── Patch interpreter ────────────────────────────────────────────────────────

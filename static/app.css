@@ -36,14 +36,21 @@ a{color:inherit;text-decoration:none}
 ══════════════════════════════════════════════════ */
 .rail{width:var(--rail);background:var(--bg0);border-right:1px solid var(--bd);
   display:flex;flex-direction:column;align-items:center;
-  padding:10px 0 12px;gap:2px;z-index:40;flex-shrink:0}
+  padding:10px 0 12px;gap:4px;z-index:40;flex-shrink:0;overflow-y:auto}
 .rail-logo{width:30px;height:30px;border-radius:8px;background:var(--bg4);
   border:1px solid var(--bdhl);display:flex;align-items:center;justify-content:center;
   font-family:var(--mono);font-size:12px;font-weight:600;color:var(--t0);
-  margin-bottom:10px;cursor:pointer;transition:all var(--ease)}
+  margin-bottom:6px;cursor:pointer;transition:all var(--ease);
+  overflow:hidden;padding:0;flex-shrink:0}
 .rail-logo:hover{background:var(--bg5)}
+.rail-logo-img{width:100%;height:100%;object-fit:contain;padding:3px}
 .rail-sep{width:22px;height:1px;background:var(--bdh);margin:3px 0;flex-shrink:0}
 .rail-gap{flex:1}
+.rail-svc{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:11px;font-weight:700;color:#fff;cursor:pointer;
+  transition:opacity var(--ease);flex-shrink:0;overflow:hidden;text-decoration:none}
+.rail-svc:hover{opacity:.8}
+.rail-svc-img{width:100%;height:100%;object-fit:cover}
 .ibtn{width:38px;height:38px;border-radius:var(--r);border:1px solid transparent;
   background:transparent;color:var(--t2);cursor:pointer;
   display:flex;align-items:center;justify-content:center;
