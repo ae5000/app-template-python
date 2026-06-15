@@ -18,7 +18,7 @@
   window.__CONFIG__ = {
     rootPath: {{ request.root_path | tojson }},
     apiBase:  {{ (request.root_path + "/api") | tojson }},
-    wsBase:   `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${{{ request.root_path | tojson }}}`,
+    wsBase:   (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + {{ request.root_path | tojson }},
   };
   window.initAppStore();
 
@@ -122,6 +122,16 @@
       </div>
     </header>
     {% endblock topbar_panel %}
+
+    {# ── DB warning banner — shown when database is not connected ── #}
+    {% if not db_connected %}
+    <div class="db-warn">
+      <span>⚠</span>
+      <span>Database not connected (backend: {{ db_backend }}) — data will not persist.
+        {% if db_backend == 'none' %}Run <code>provision-service.sh</code> and ensure DATABASE_URL is set.{% endif %}
+      </span>
+    </div>
+    {% endif %}
 
     {# ── Global progress bar — driven by $store.app.ui.progress (0-100 or null) ── #}
     <div class="pbar" x-show="$store.app.ui.progress !== null" x-cloak>

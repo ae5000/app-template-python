@@ -20,8 +20,8 @@ expose:
 # and stores the connection string as a Swarm secret. Read in the service with:
 #   read_secret("DATABASE_URL")  # from platform_auth import read_secret
 #
-# database:
-#   postgres: true
+database:
+  postgres: true
 
 # Optional: inject additional secrets from .env.secrets into the container.
 # Each name must have a matching {SERVICE_PREFIX}_{NAME} key in .env.secrets.

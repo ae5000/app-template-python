@@ -19,9 +19,15 @@ This project is a FastAPI app that plugs into the bgrx platform. It has a full H
 
 ```
 main.py                          # FastAPI app, all routes, WS channel logic
+db.py                            # DB abstraction — asyncpg (prod) or aiosqlite (local dev)
+platform_auth.py                 # Platform auth middleware + read_secret()
+platform.yaml                    # Service config — name, groups, database, secrets
+sql/
+  001_items.sql                  # CREATE TABLE IF NOT EXISTS — runs on every startup
 static/
   app.js                         # Alpine store init, applyPatch, channel manager
   app.css                        # Design system CSS variables and components
+  icon.svg                       # Service icon shown in the platform rail (replace this)
 templates/
   base.html                      # Shell: rail nav + left nav + topbar + content
   base_no_nav.html               # base.html variant — no left nav
@@ -69,6 +75,101 @@ Dev bypass: set `DEV_MOCK_USER=email:group1,group2` to skip auth. Mock user gets
 ```bash
 DEV_MOCK_USER=dev@local:engineering,admin uvicorn main:app --reload
 ```
+
+## Database
+
+### How it works
+
+`db.py` exposes a `DB` class with a unified interface over asyncpg (Postgres) or aiosqlite (local SQLite). `init_db()` selects the backend automatically:
+
+| Condition | Backend |
+|---|---|
+| `DATABASE_URL` secret/env set | Postgres via asyncpg pool |
+| No URL + not in Docker container | SQLite `dev.db` (local dev) |
+| No URL + in Docker container | Not connected — warning banner shown |
+
+The `db` global is initialised in `lifespan` before `platform_lifespan` runs. All routes use it directly — no dependency injection needed.
+
+### SQL migrations
+
+Put `*.sql` files in `sql/` numbered in execution order. They run on **every startup** via `db.run_migrations("sql")`. Write them idempotently — always `CREATE TABLE IF NOT EXISTS`, never `DROP` or `TRUNCATE`. Add columns in new files (`002_add_foo.sql`), never alter existing ones destructively.
+
+SQL is written in **Postgres dialect**. For SQLite local dev, `db.py` adapts automatically:
+- `$1`, `$2` → `?`
+- `TIMESTAMPTZ` → `TEXT`
+- `now()` → `datetime('now')`
+
+```sql
+-- sql/001_items.sql
+CREATE TABLE IF NOT EXISTS items (
+    id         TEXT        PRIMARY KEY,
+    name       TEXT        NOT NULL,
+    value      TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### Using the DB in routes
+
+```python
+from db import db  # module-level instance, ready after lifespan
+
+# List
+rows = await db.fetch("SELECT id, name, value FROM items ORDER BY created_at")
+# → list[dict]
+
+# Single row
+row = await db.fetchrow("SELECT id, name, value FROM items WHERE id=$1", item_id)
+# → dict | None
+
+# Insert / update
+await db.execute(
+    "INSERT INTO items (id, name, value) VALUES ($1, $2, $3)",
+    item_id, name, value,
+)
+
+# Delete — check command tag to detect 404
+result = await db.execute("DELETE FROM items WHERE id=$1", item_id)
+if result == "DELETE 0":
+    raise HTTPException(404, "Not found")
+```
+
+All methods use Postgres `$N` parameter placeholders. The SQLite adapter converts them at runtime — never use `?` directly in SQL strings.
+
+### Warning banner + health
+
+`base.html` shows a red banner at the top of every page when `db_connected` is `False`. This Jinja2 global is set in lifespan — no per-route code needed.
+
+`/health` returns:
+```json
+{"status": "ok",       "db": "postgres"}   // connected
+{"status": "degraded", "db": "none"}       // not connected
+```
+
+### Provisioning a database
+
+Set `database: postgres: true` in `platform.yaml` (already enabled in the template), then run once from `platform-infra/`:
+
+```bash
+bash scripts/provision-service.sh my-service --service-dir=../my-service
+```
+
+This creates a Postgres user + database, stores the connection string as a Docker Swarm secret (`my_service_db_url`), and mounts it at `/run/secrets/DATABASE_URL`. For an already-running service, also run:
+
+```bash
+# SSH array must be set first — see platform-infra README
+"${SSH[@]}" "docker service update --secret-add source=my_service_db_url,target=DATABASE_URL platform_my-service"
+```
+
+### Local dev
+
+No setup needed — `db.py` falls back to SQLite `dev.db` automatically when not in a container. Set `DATABASE_URL` env var to point at a local Postgres instance instead:
+
+```bash
+DATABASE_URL=postgresql://user:pass@localhost/mydb DEV_MOCK_USER=dev@local:engineering uvicorn main:app --reload
+```
+
+---
 
 ## CLI + MCP Exposure
 
@@ -452,6 +553,38 @@ background: var(--blue);
 ```
 
 When a visual element disappears unexpectedly: check the variable name against the CSS variables table before debugging Alpine or JS.
+
+### 12. SQL migration files must be idempotent
+
+**Symptom:** App crashes on restart with `already exists` or `duplicate column` errors.
+
+**Cause:** Migration files run on every startup, not once. A `CREATE TABLE` without `IF NOT EXISTS` fails the second time.
+
+**Fix:** Always write `CREATE TABLE IF NOT EXISTS`. For adding columns, use:
+```sql
+-- 002_add_description.sql
+ALTER TABLE items ADD COLUMN IF NOT EXISTS description TEXT;
+```
+
+### 13. `db` global is `DB()` (not connected) before lifespan
+
+**Symptom:** Importing `db` from `main.py` in tests and calling methods immediately raises `AttributeError` or silently returns empty results.
+
+**Cause:** `db: DB = DB()` is the unconnected default. It only becomes a real connected instance after `lifespan` runs. `TestClient` with `with` context triggers lifespan. Without it, `db` is still the empty default.
+
+**Fix:** Always use `TestClient` as a context manager in tests:
+```python
+with TestClient(app) as client:    # triggers lifespan → db connects
+    resp = client.get("/api/items")
+```
+
+### 14. `?` placeholders break on Postgres
+
+**Symptom:** `asyncpg` raises `SyntaxError` on a query with `?` params.
+
+**Cause:** asyncpg uses `$1`, `$2` placeholders. `?` is SQLite/DBAPI2 style. The `_pg_to_sqlite()` adapter in `db.py` converts `$N` → `?` for SQLite — it does NOT convert the other direction.
+
+**Fix:** Always write SQL with `$1`, `$2` placeholders. The adapter handles SQLite; Postgres gets them unchanged.
 
 ### 10. `wsBase` XSS via Host header
 

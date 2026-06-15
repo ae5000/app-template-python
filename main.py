@@ -13,15 +13,29 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from db import DB, init_db
 from platform_auth import PlatformAuthMiddleware, platform_lifespan, current_user, PlatformUser
 
 _REGISTRY_URL = os.getenv("PLATFORM_REGISTRY_URL", "http://registry:8000")
 
+# ---------------------------------------------------------------------------
+# Database — initialised in lifespan, available to all routes
+# ---------------------------------------------------------------------------
+
+db: DB = DB()  # not connected until lifespan runs
+
 
 @asynccontextmanager
 async def lifespan(app):
+    global db
+    db = await init_db()
+    await db.run_migrations("sql")
+    # Inject db status into all Jinja2 templates as a global
+    templates.env.globals["db_connected"] = db.connected
+    templates.env.globals["db_backend"] = db.backend
     async with platform_lifespan(app):
         yield
+    await db.close()
 
 
 ROOT_PATH = os.getenv("ROOT_PATH", "")
@@ -45,14 +59,15 @@ _DEBUG_SHOW_STATE = _read_debug_flag()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["db_connected"] = False   # overwritten in lifespan
+templates.env.globals["db_backend"] = "none"
 
 _STATIC_VERSION = str(int(os.path.getmtime("static/app.js")))
 
 # ---------------------------------------------------------------------------
-# In-memory stores
+# In-memory stores (channels + jobs are ephemeral by nature — no DB needed)
 # ---------------------------------------------------------------------------
 
-_items: dict[str, dict] = {}
 _channels: dict[str, dict] = {}  # channel_id -> {"user_id": str, "ws": WebSocket | None}
 _jobs: dict[str, dict] = {}      # job_id -> {"status": str, "progress": int, "log": list}
 
@@ -99,7 +114,19 @@ def _user_ctx(user: PlatformUser) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# WebSocket channel routes
+# Health — override platform_lifespan's default so we can include DB status
+# ---------------------------------------------------------------------------
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {
+        "status": "ok" if db.connected else "degraded",
+        "db": db.backend,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Platform proxy routes
 # ---------------------------------------------------------------------------
 
 @app.get("/__platform/nav", include_in_schema=False)
@@ -119,6 +146,10 @@ async def platform_branding():
         r = await client.get(f"{_REGISTRY_URL}/portal/branding")
     return Response(content=r.content, status_code=r.status_code, media_type="application/json")
 
+
+# ---------------------------------------------------------------------------
+# WebSocket channel routes
+# ---------------------------------------------------------------------------
 
 @app.post("/ws/channel", include_in_schema=False)
 async def create_channel(user: PlatformUser = Depends(current_user)):
@@ -149,7 +180,7 @@ async def channel_ws(websocket: WebSocket, channel_id: str):
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def ui_items(request: Request, user: PlatformUser = Depends(current_user)):
-    items = [{"id": k, **v} for k, v in _items.items()]
+    items = await db.fetch("SELECT id, name, value FROM items ORDER BY created_at")
     return templates.TemplateResponse(request, "pages/items.html", {
         "user": _user_ctx(user),
         "items": items,
@@ -162,11 +193,12 @@ async def ui_items(request: Request, user: PlatformUser = Depends(current_user))
 async def ui_item_detail(
     request: Request, item_id: str, user: PlatformUser = Depends(current_user)
 ):
-    if item_id not in _items:
+    item = await db.fetchrow("SELECT id, name, value FROM items WHERE id=$1", item_id)
+    if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return templates.TemplateResponse(request, "pages/item_detail.html", {
         "user": _user_ctx(user),
-        "item": {"id": item_id, **_items[item_id]},
+        "item": item,
         "static_version": _STATIC_VERSION,
         "debug_show_state": _DEBUG_SHOW_STATE,
     })
@@ -191,7 +223,7 @@ async def ui_item_detail(
     openapi_extra={"x-platform": {"cli": {"command": "my-service list-items"}}},
 )
 async def list_items(user: PlatformUser = Depends(current_user)):
-    return [{"id": k, **v} for k, v in _items.items()]
+    return await db.fetch("SELECT id, name, value FROM items ORDER BY created_at")
 
 
 @app.post(
@@ -201,7 +233,7 @@ async def list_items(user: PlatformUser = Depends(current_user)):
     summary="Create an item",
     openapi_extra={"x-platform": {"cli": {"command": "my-service create-item", "args": [
         {"name": "name", "type": "string", "required": True},
-        {"name": "description", "type": "string", "required": False},
+        {"name": "value", "type": "string", "required": True},
     ]}}},
 )
 async def create_item(
@@ -210,8 +242,11 @@ async def create_item(
     channel_id: str | None = Header(None, alias="X-Channel-Id"),
 ):
     item_id = str(uuid.uuid4())[:8]
-    _items[item_id] = item.model_dump()
-    result = {"id": item_id, **_items[item_id]}
+    await db.execute(
+        "INSERT INTO items (id, name, value) VALUES ($1, $2, $3)",
+        item_id, item.name, item.value,
+    )
+    result = {"id": item_id, "name": item.name, "value": item.value}
     await push(channel_id, {"op": "add", "path": "items", "value": result})
     return result
 
@@ -223,9 +258,10 @@ async def create_item(
     summary="Get an item by ID",
 )
 async def get_item(item_id: str, user: PlatformUser = Depends(current_user)):
-    if item_id not in _items:
+    row = await db.fetchrow("SELECT id, name, value FROM items WHERE id=$1", item_id)
+    if not row:
         raise HTTPException(status_code=404, detail="Item not found")
-    return {"id": item_id, **_items[item_id]}
+    return row
 
 
 @app.delete(
@@ -238,10 +274,10 @@ async def delete_item(
     user: PlatformUser = Depends(current_user),
     channel_id: str | None = Header(None, alias="X-Channel-Id"),
 ):
-    if item_id not in _items:
-        raise HTTPException(status_code=404, detail="Item not found")
     user.require_group("engineering")
-    del _items[item_id]
+    result = await db.execute("DELETE FROM items WHERE id=$1", item_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="Item not found")
     await push(channel_id, {"op": "remove", "path": "items", "id": item_id})
     return {"deleted": item_id}
 
