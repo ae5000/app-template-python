@@ -33,7 +33,7 @@ from starlette.responses import JSONResponse
 log = logging.getLogger(__name__)
 
 _SKIP_PATHS = {"/openapi.json", "/docs", "/redoc", "/health"}
-_SKIP_PREFIX = "/__platform/"
+_SKIP_PREFIX = ("/__platform/", "/static/")
 _HEARTBEAT_INTERVAL = 60
 _REGISTER_BACKOFF = [1, 2, 4, 8, 16]
 
@@ -63,12 +63,12 @@ def read_secret(name: str, default: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 class PlatformUser(BaseModel):
-    user_id: str
-    email: str
-    groups: list[str]
-    issued_at: int
-    expires_at: int
-    issued_by: str
+    user_id: str = ""
+    email: str | None = None
+    groups: list[str] = []
+    issued_at: int = 0
+    expires_at: int = 0
+    issued_by: str = ""
 
     def require_group(self, *groups: str) -> None:
         if not any(g in self.groups for g in groups):
@@ -83,7 +83,7 @@ class PlatformAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if path in _SKIP_PATHS or path.startswith(_SKIP_PREFIX):
+        if path in _SKIP_PATHS or any(path.startswith(p) for p in _SKIP_PREFIX):
             return await call_next(request)
 
         # Dev bypass: DEV_MOCK_USER=email:group1,group2
